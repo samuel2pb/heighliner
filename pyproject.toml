@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "heighliner"
+version = "0.1.0"
+description = ""
+authors = ["samuel2pb <samuelpedropbarbosa@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+poetry = "^1.1.11"
+pydantic = "^1.8.2"
+python = "^3.8"
+wheel = "*"
+apache-airflow = ">=2.6.0"
+apache-airflow-providers-amazon = ">=8.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

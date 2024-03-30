@@ -1,0 +1,83 @@
+from typing import Any, Dict
+from airflow import DAG
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import PythonOperator, BranchPythonOperator
+from airflow.providers.amazon.aws.operators.emr import (
+    EmrCreateJobFlowOperator, EmrAddStepsOperator, EmrTerminateJobFlowOperator)
+from airflow.utils.task_group import TaskGroup
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.utils.dates import days_ago
+
+JOB_FLOW_OVERRIDES: Dict[str, Any] = {
+    "Name": "PiCalc",
+    "ReleaseLabel": "emr-6.7.0",
+    "Applications": [{"Name": "Spark"}],
+    "Instances": {
+        "InstanceGroups": [
+            {
+                "Name": "Primary node",
+                "Market": "ON_DEMAND",
+                "InstanceRole": "MASTER",
+                "InstanceType": "m5.xlarge",
+                "InstanceCount": 1,
+            },
+        ],
+        "KeepJobFlowAliveWhenNoSteps": False,
+        "TerminationProtected": False,
+    },
+    # "Steps": SPARK_STEPS,
+    "JobFlowRole": "EMR_EC2_DefaultRole",
+    "ServiceRole": "EMR_DefaultRole",
+}
+
+
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'start_date': days_ago(1),
+}
+
+with DAG(
+    dag_id="EMR_BUS_DAG",
+    default_args=default_args,
+    description='Uma DAG para provisionar um Cluster de barramento',
+    schedule_interval="@daily",
+    tags=['emr', 'b3df', 'autoserv'],
+
+) as dag:
+    """
+    Template DAG EMR com uso do framework B3DF
+    """
+
+    end = EmptyOperator(task_id='end')
+
+    create_cluster = EmrCreateJobFlowOperator(
+        task_id="create_cluster",
+        job_flow_overrides=JOB_FLOW_OVERRIDES,
+        wait_for_completion=True,
+        waiter_delay=300,
+        waiter_max_attempts=5,
+        deferrable=True,
+    )
+
+    jobs = []
+    subdags = []
+
+    for job in jobs:
+        subdags.append(
+            TriggerDagRunOperator(
+                trigger_dag_id=job,
+                wait_for_completion=True,
+                poke_interval=60,
+                deferrable=True)
+        )
+
+    remove_cluster = EmrTerminateJobFlowOperator(
+        task_id="remove_cluster",
+        job_flow_id=create_cluster.output,  # type: ignore
+        waiter_delay=120,
+        waiter_max_attempts=5,
+        deferrable=True,
+    )
+
+    create_cluster >> subdags >> end
