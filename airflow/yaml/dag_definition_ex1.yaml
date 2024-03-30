@@ -1,17 +1,17 @@
 job_info:
   job_type: add_emr_step
-  job_name: autoserv_001
+  job_name: autoserv_001 #Tem sempre que ser único
   module_name: autoserv
 default_args:
   owner: 'example_owner1'
   start_date: '2018-01-01'  # or '2 days'
   retries: 1
   retry_delay_sec: 300
-schedule_interval: '0 3 * * *'
+schedule: null
 concurrency: 1
 max_active_runs: 1
 dagrun_timeout_sec: 60
 default_view: 'tree'  # or 'graph', 'duration', 'gantt', 'landing_times'
 orientation: 'LR'  # or 'TB', 'RL', 'BT'
 description: 'this is an example dag!'
-tags: [emr, b3df,autoserv]
+tags: [emr,autoserv]

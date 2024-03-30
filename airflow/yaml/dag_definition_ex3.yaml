@@ -1,13 +1,13 @@
 job_info:
-  job_type: create_emr_cluster
-  job_name: autoserv_cluster
-  module_name: autoserv
+  job_type: echo_step
+  job_name: echo_autoserv_002
+  module_name: echo
 default_args:
   owner: 'example_owner2'
   start_date: '2018-01-01'  # or '2 days'
   retries: 1
   retry_delay_sec: 300
-schedule: '@daily'
+schedule: null
 concurrency: 1
 max_active_runs: 1
 dagrun_timeout_sec: 60

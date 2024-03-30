@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from .models import CreateEMRClusterDAG, EmrAddStepsDAG
+from .models import CreateEMRClusterDAG, EmrAddStepsDAG, EchoStepDAG, CreateEchoCluster
 
 
 class DAGBuilder:
@@ -8,6 +8,8 @@ class DAGBuilder:
 
         self.emr_add_steps_dags = []
         self.emr_create_cluster_dags = []
+        self.echo_add_steps_dags = []
+        self.echo_create_cluster_dags = []
 
         for dag_definition in self.dag_definitions:
             job_info = dag_definition["job_info"]
@@ -15,8 +17,12 @@ class DAGBuilder:
 
             if job_type == "create_emr_cluster":
                 self.emr_create_cluster_dags.append(dag_definition)
-            elif job_type == "emr_add_steps":
+            elif job_type == "add_emr_step":
                 self.emr_add_steps_dags.append(dag_definition)
+            elif job_type == "create_echo_cluster":
+                self.echo_create_cluster_dags.append(dag_definition)
+            elif job_type == "echo_step":
+                self.echo_add_steps_dags.append(dag_definition)
 
     def build_dags(self):
 
@@ -32,6 +38,18 @@ class DAGBuilder:
             job_info = dag_definition["job_info"]
             dag_id = job_info["job_name"]
             dag = CreateEMRClusterDAG(**dag_definition)
+            dags.append({"dag_id": dag_id, "dag": dag.build()})
+
+        for dag_definition in self.echo_add_steps_dags:
+            job_info = dag_definition["job_info"]
+            dag_id = job_info["job_name"]
+            dag = EchoStepDAG(**dag_definition)
+            dags.append({"dag_id": dag_id, "dag": dag.build()})
+
+        for dag_definition in self.echo_create_cluster_dags:
+            job_info = dag_definition["job_info"]
+            dag_id = job_info["job_name"]
+            dag = CreateEchoCluster(**dag_definition)
             dags.append({"dag_id": dag_id, "dag": dag.build()})
 
         for dag in dags:

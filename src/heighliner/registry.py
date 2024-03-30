@@ -50,6 +50,7 @@ class Registry(metaclass=SingletonMeta):
                                 "job_type": job_type,
                             }
                         )
+                        # TODO: Criar um hash baseado no conteúdo do yaml para elaborar o nome da DAG.
 
     def get_registry(self) -> RegistryType:
         """
