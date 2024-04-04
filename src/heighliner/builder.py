@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from .models import CreateEMRClusterDAG, EmrAddStepsDAG, EchoStepDAG, CreateEchoCluster
+from .models import CreateEMRClusterDAG, EmrAddStepsDAG, EchoStepDAG, EchoClusterDAG
 
 
 class DAGBuilder:
@@ -49,7 +49,7 @@ class DAGBuilder:
         for dag_definition in self.echo_create_cluster_dags:
             job_info = dag_definition["job_info"]
             dag_id = job_info["job_name"]
-            dag = CreateEchoCluster(**dag_definition)
+            dag = EchoClusterDAG(**dag_definition)
             dags.append({"dag_id": dag_id, "dag": dag.build()})
 
         for dag in dags:
