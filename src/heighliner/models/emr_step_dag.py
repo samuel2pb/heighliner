@@ -25,18 +25,20 @@ class EmrAddStepsDAG(JOBStyleGenericDAG):
         # self.validate()
 
         from airflow.operators.empty import EmptyOperator
+        from airflow.sensors.external_task import ExternalTaskSensor
         from airflow.operators.python import PythonOperator, BranchPythonOperator
         from airflow.providers.amazon.aws.operators.emr import EmrAddStepsOperator
-        from ..utils import build_spark_submit, validate_execution
+        from ..utils import get_cluster, build_spark_submit, validate_execution
+
+        wait_cluster_sensor_id = f"wait_cluster_{self.module_name}"
+        create_cluster_dag_id = f"dag_{self.module_name}_job_group"
+        create_cluster_task_id = f"create_cluster_{self.module_name}"
 
         validation_task_id = f"validation_task_{self.job_name}"
-        get_spark_submit_cmd_task_id = f"get_spark_submit_cmd_task_{self.job_name}"
-        add_steps_task_id = f"add_steps_task_{self.job_name}"
-        end_task_id = f"end_task_{self.job_name}"
-
-        emr_bus_cluster_id = f"{self.module_name}_EMR_MODULE_BUS"
-        emr_bus_cluster_task_id = f"create_cluster_{self.module_name}"
-        xcom_pull_statement = f"{{{{ task_instance.xcom_pull(dag_id='{emr_bus_cluster_id}', task_ids='{emr_bus_cluster_task_id}') }}}}"
+        get_submit_cmd_task_id = f"get_spark_submit_cmd_{self.job_name}"
+        get_cluster_id_task_id = f"get_cluster_id_{self.job_name}"
+        add_step_task_id = f"add_step_{self.job_name}"
+        end_task_id = f"end_{self.job_name}"
 
         with DAG(
             dag_id=self.dag_id,
@@ -53,18 +55,32 @@ class EmrAddStepsDAG(JOBStyleGenericDAG):
             branch_from_validation = BranchPythonOperator(
                 task_id=validation_task_id,
                 python_callable=validate_execution,
-                provide_context=True,
+            )
+
+            wait_cluster = ExternalTaskSensor(
+                task_id=wait_cluster_sensor_id,
+                external_dag_id=create_cluster_dag_id,
+                external_task_id=create_cluster_task_id,
+                poll_interval=30,
+            )
+
+            get_cluster_id = PythonOperator(
+                task_id=get_cluster_id_task_id,
+                python_callable=get_cluster,
+                op_kwargs={
+                    "dag_id": create_cluster_dag_id,
+                    "task_id": create_cluster_task_id,
+                },
             )
 
             get_spark_submit_cmd = PythonOperator(
-                task_id=get_spark_submit_cmd_task_id,
+                task_id=get_submit_cmd_task_id,
                 python_callable=build_spark_submit,
-                provide_context=True,
             )
 
-            add_steps = EmrAddStepsOperator(
-                task_id=add_steps_task_id,
-                job_flow_id=xcom_pull_statement,
+            add_step = EmrAddStepsOperator(
+                task_id=add_step_task_id,
+                job_flow_id=get_cluster_id.output,
                 steps=get_spark_submit_cmd.output,
                 wait_for_completion=True,
                 waiter_delay=60,
@@ -74,7 +90,7 @@ class EmrAddStepsDAG(JOBStyleGenericDAG):
 
             end = EmptyOperator(task_id=end_task_id)
 
-            branch_from_validation >> [get_spark_submit_cmd, end]
-            get_spark_submit_cmd >> add_steps >> end
+            branch_from_validation >> [wait_cluster, end]
+            wait_cluster >> get_cluster_id >> get_spark_submit_cmd >> add_step >> end
 
             return dag

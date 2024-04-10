@@ -1,5 +1,5 @@
 from airflow import DAG
-from typing import List
+from typing import Dict
 from ..interfaces.generic_dag import JOBStyleGenericDAG
 from ..registry import Registry
 
@@ -14,7 +14,7 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
     def load_values(self):
 
         self.module_name: str = self.job_info.get("module_name")
-        self.dag_id: str = f"{self.module_name}_EMR_MODULE_BUS"
+        self.dag_id: str = f"dag_{self.module_name}_job_group"
 
     def validate(self, model):
         return self.model_validate(model)
@@ -23,7 +23,6 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
 
         self.load_values()
 
-        from airflow.operators.empty import EmptyOperator
         from airflow.providers.amazon.aws.operators.emr import (
             EmrCreateJobFlowOperator,
             EmrTerminateJobFlowOperator,
@@ -32,15 +31,16 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
         from airflow.operators.trigger_dagrun import TriggerDagRunOperator
         from ..constants import JOB_FLOW_OVERRIDES
 
-        create_cluster_task_id = f"create_cluster_{self.module_name}"  # Precisa ser o valor do xcom dessa task
-        module_subdags_ids = []
         jobs = registry.get(self.module_name).get("jobs")
+
+        create_cluster_task_id = f"create_cluster_{self.module_name}"
+        module_job_ids = []
 
         for job in jobs:
             job_name = job.get("job_name")
             job_type = job.get("job_type")
             if job_type not in ["create_emr_cluster", "create_echo_cluster"]:
-                module_subdags_ids.append(f"dag_{job_name}")
+                module_job_ids.append(job_name)
 
         remove_cluster_task_id = f"remove_cluster_task_{self.module_name}"
 
@@ -56,8 +56,6 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
         ) as dag:
             """ """
 
-            end = EmptyOperator(task_id="end")
-
             create_cluster = EmrCreateJobFlowOperator(
                 task_id=create_cluster_task_id,
                 job_flow_overrides=JOB_FLOW_OVERRIDES,
@@ -67,16 +65,16 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
                 deferrable=True,
             )
 
-            subdags: List[TriggerDagRunOperator] = []
-            for subdag in module_subdags_ids:
-                subdags.append(
-                    TriggerDagRunOperator(
-                        task_id=f"trigger_{subdag}",
-                        trigger_dag_id=subdag,
-                        wait_for_completion=True,
-                        poke_interval=60,
-                        deferrable=True,
-                    )
+            subdags: Dict[str, TriggerDagRunOperator] = {}
+
+            for job in module_job_ids:
+                subdags[job] = TriggerDagRunOperator(
+                    task_id=f"trigger_{job}",
+                    trigger_dag_id=f"dag_{job}",
+                    execution_date="{{ execution_date }}",
+                    wait_for_completion=True,
+                    poke_interval=60,
+                    deferrable=True,
                 )
 
             remove_cluster = EmrTerminateJobFlowOperator(
@@ -87,6 +85,7 @@ class CreateEMRClusterDAG(JOBStyleGenericDAG):
                 deferrable=True,
             )
 
-            create_cluster >> subdags >> remove_cluster >> end
+            for job in module_job_ids:
+                create_cluster >> subdags[job] >> remove_cluster
 
             return dag
